@@ -29,9 +29,6 @@ namespace Oxide.Plugins
             [JsonProperty("Maximum number of friends (0 to disable)")]
             public int MaxFriends = 30;
 
-            [JsonProperty("Maximum number of blocked users (0 to disable)")]
-            public int MaxBlockedUsers = 30;
-
             [JsonProperty("Use permission system")]
             public bool UsePermissions = false;
 
@@ -78,17 +75,13 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<string, HashSet<string>> reverseData = new Dictionary<string, HashSet<string>>();
         private Dictionary<string, PlayerData> friendsData;
-        private Dictionary<string, PlayerData> blockedData;
 
         private static readonly DateTime Epoch = new DateTime(1970, 1, 1);
 
         private class PlayerData
         {
             public string Name { get; set; } = string.Empty;
-            public string BlockedNames { get; set; } = string.Empty;
             public HashSet<string> Friends { get; set; } = new HashSet<string>();
-            // Blocked Users
-            public HashSet<string> BlockedUsers { get; set; } = new HashSet<string>();
             public Dictionary<string, int> Cached { get; set; } = new Dictionary<string, int>();
 
             public bool IsCached(string playerId)
@@ -112,7 +105,6 @@ namespace Oxide.Plugins
         private void SaveData()
         {
             Interface.Oxide.DataFileSystem.WriteObject(Name, friendsData);
-            Interface.Oxide.DataFileSystem.WriteObject(BlockedNames, blockedData);
         }
 
         #endregion Stored Data
@@ -124,29 +116,20 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 ["AlreadyOnList"] = "{0} is already your friend",
-                ["AlreadyOnBlockedList"] = "{0} is already your friend",
                 ["CannotAddSelf"] = "You cannot add yourself",
-                ["CannotBlockSelf"] = "You cannot block yourself",
                 ["CommandFriend"] = "friend",
                 ["FriendAdded"] = "{0} is now your friend",
                 ["FriendRemoved"] = "{0} was removed from your friend list",
                 ["FriendList"] = "Friends {0}:\n{1}",
                 ["FriendListFull"] = "Your friend list is full",
                 ["NoFriends"] = "You do not have any friends",
-                ["BlockedUserAdded"] = "{0} is now blocked",
-                ["BlockedUserRemoved"] = "{0} was removed from your blocked list",
-                ["BlockedList"] = "Blocked Players {0}:\n{1}",
-                ["BlockedListFull"] = "Your blocked users list is full",
-                ["NoBlockedUsers"] = "You do not have any blocked users",
                 ["NotAllowed"] = "You are not allowed to use the '{0}' command",
                 ["NoPlayersFound"] = "No players found with name or ID '{0}'",
                 ["NotOnFriendList"] = "{0} not found on your friend list",
-                ["NotOnBlockedList"] = "{0} not found on your blocked list",
                 ["PlayerNotFound"] = "Player '{0}' was not found",
                 ["PlayersFound"] = "Multiple players were found, please specify: {0}",
                 ["PlayersOnly"] = "Command '{0}' can only be used by players",
-                ["UsageFriend"] = "Usage {0} <add|remove|list> <player name or id>",
-                ["UsageBlockedUsers"] = "Usage {0} <add|remove|list> <player name or id>"
+                ["UsageFriend"] = "Usage {0} <add|remove|list> <player name or id>"
             }, this);
         }
 
@@ -171,27 +154,11 @@ namespace Oxide.Plugins
                 friendsData = new Dictionary<string, PlayerData>();
             }
 
-            try
-            {
-                blockedData = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<string, PlayerData>>(BlockedNames);
-            }
-            catch
-            {
-                blockedData = new Dictionary<string, PlayerData>();
-            }
-
             foreach (KeyValuePair<string, PlayerData> data in friendsData)
             {
                 foreach (string friendId in data.Value.Friends)
                 {
                     AddFriendReverse(data.Key, friendId);
-                }
-            }
-            foreach (KeyValuePair<string, PlayerData> data in blockedData)
-            {
-                foreach (string blockedId in data.Value.BlockedUsers)
-                {
-                    AddBlockedUserReverse(data.Key, blockedId);
                 }
             }
         }
@@ -237,7 +204,6 @@ namespace Oxide.Plugins
             friends.Add(playerId);
         }
 
-
         private bool RemoveFriend(string playerId, string friendId)
         {
             if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(friendId))
@@ -271,84 +237,6 @@ namespace Oxide.Plugins
         private bool RemoveFriend(ulong playerId, ulong friendId)
         {
             return RemoveFriend(playerId.ToString(), friendId.ToString());
-        }
-
-        #endregion Add/Remove Friends
-
-        #region Add/Remove Blocked Users
-
-        private bool AddBlockedUser(string playerId, string blockedId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(friendId))
-
-            {
-                PlayerData playerData = GetBlockedPlayerData(playerId);
-                if (playerData.BlockedUsers.Count >= config.MaxFriends || !playerData.BlockedUsers.Add(blockedId))
-                {
-                    return false;
-                }
-
-                AddBlockedUserReverseReverse(playerId, blockedId);
-                SaveData();
-
-                Interface.Oxide.CallHook("OnBlockedUserAdded", playerId, blockedId);
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool AddBlockedUser(ulong playerId, ulong blockedId)
-        {
-            return AddFriend(playerId.ToString(), blockedId.ToString());
-        }
-
-
-        private void AddBlockedUserReverse(string playerId, string blockedId)
-        {
-            HashSet<string> blockedUsers;
-            if (!reverseData.TryGetValue(friendId, out blockedUsers))
-            {
-                reverseData[blockedId] = blockedUsers = new HashSet<string>();
-            }
-
-            blockedUsers.Add(playerId);
-        }
-
-
-        private bool RemoveBlockedUser(string playerId, string blockedId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedId))
-            {
-                PlayerData playerData = GetBlockedPlayerData(playerId);
-                if (!playerData.BlockedUsers.Remove(blockedId))
-                {
-                    return false;
-                }
-
-                HashSet<string> blockedUsers;
-                if (reverseData.TryGetValue(friendId, out blockedUsers))
-                {
-                    blockedUsers.Remove(playerId);
-                }
-
-                if (config.CacheTime > 0)
-                {
-                    playerData.Cached[blockedId] = (int)DateTime.UtcNow.Subtract(Epoch).TotalSeconds + config.CacheTime;
-                }
-
-                SaveData();
-
-                Interface.Oxide.CallHook("OnBlockedUserRemoved", playerId, blockedId);
-                return true;
-            }
-
-            return false;
-        }
-
-        private bool RemoveBlockedUser(ulong playerId, ulong blockedId)
-        {
-            return RemoveBlockedUser(playerId.ToString(), blockedId.ToString());
         }
 
         #endregion Add/Remove Friends
@@ -456,109 +344,6 @@ namespace Oxide.Plugins
 
         #endregion Friend Checks
 
-        #region Blocked Users Checks
-
-        private bool HasBlockedUser(string playerId, string blockedUserId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedUserId))
-            {
-                return GetBlockedPlayerData(playerId).BlockedUsers.Contains(blockedUserId);
-            }
-
-            return false;
-        }
-
-        private bool HasBlockedUser(ulong playerId, ulong blockedUserId)
-        {
-            return HasBlockedUser(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private bool HadBlockedUser(string playerId, string blockedUserId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedUserId))
-            {
-                PlayerData playerData = GetBlockedPlayerData(playerId);
-                return playerData.BlockedUsers.Contains(blockedUserId) || playerData.IsCached(blockedUserId);
-            }
-
-            return false;
-        }
-
-        private bool HadBlockedUser(ulong playerId, ulong blockedUserId)
-        {
-            return HadBlockedUser(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private bool AreBlockedUsers(string playerId, string blockedUserId)
-        {
-            if (string.IsNullOrEmpty(playerId) || string.IsNullOrEmpty(blockedUserId))
-            {
-                return false;
-            }
-
-            return GetBlockedPlayerData(playerId).BlockedUsers.Contains(blockedUserId) && GetBlockedPlayerData(blockedUserId).BlockedUsers.Contains(playerId);
-        }
-
-        private bool AreBlockedUsers(ulong playerId, ulong blockedUserId)
-        {
-            return AreBlockedUsers(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private bool WereBlockedUsers(string playerId, string blockedUserId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedUserId))
-            {
-                PlayerData playerData = GetBlockedPlayerData(playerId);
-                PlayerData friendData = GetBlockedPlayerData(blockedUserId);
-                return (playerData.BlockedUsers.Contains(blockedUserId) || playerData.IsCached(blockedUserId)) && (friendData.BlockedUsers.Contains(playerId) || friendData.IsCached(playerId));
-            }
-
-            return false;
-        }
-
-        private bool WereBlockedUsers(ulong playerId, ulong blockedUserId)
-        {
-            return WereBlockedUsers(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private bool IsBlockedUser(string playerId, string blockedUserId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedUserId))
-            {
-                return GetBlockedPlayerData(blockedUserId).BlockedUsers.Contains(playerId);
-            }
-
-            return false;
-        }
-
-        private bool IsBlockedUser(ulong playerId, ulong blockedUserId)
-        {
-            return IsBlockedUser(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private bool WasBlockedUser(string playerId, string blockedUserId)
-        {
-            if (!string.IsNullOrEmpty(playerId) && !string.IsNullOrEmpty(blockedUserId))
-            {
-                PlayerData playerData = GetBlockedPlayerData(blockedUserId);
-                return playerData.BlockedUsers.Contains(playerId) || playerData.IsCached(playerId);
-            }
-
-            return false;
-        }
-
-        private bool WasBlockedUser(ulong playerId, ulong blockedUserId)
-        {
-            return WasBlockedUser(playerId.ToString(), blockedUserId.ToString());
-        }
-
-        private int GetMaxBlockedUsers()
-        {
-            return config.MaxBlockedUsers;
-        }
-
-        #endregion Blocked Users Checks
-
         #region Friend Lists
 
         private string[] GetFriends(string playerId)
@@ -601,49 +386,6 @@ namespace Oxide.Plugins
         }
 
         #endregion Friend Lists
-
-        #region Blocked Users Lists
-
-        private string[] GetBlockedUsers(string playerId)
-        {
-            return GetBlockedPlayerData(playerId).BlockedUsers.ToArray();
-        }
-
-        private ulong[] GetBlockedUsers(ulong playerId)
-        {
-            return GetBlockedPlayerData(playerId.ToString()).BlockedUsers.Select(ulong.Parse).ToArray();
-        }
-
-        private string[] GetBlockedUsersList(string playerId)
-        {
-            PlayerData playerData = GetBlockedPlayerData(playerId);
-            List<string> players = new List<string>();
-
-            foreach (string blockedUserId in playerData.BlockedUsers)
-            {
-                players.Add(GetBlockedPlayerData(blockedUserId).BlockedNames);
-            }
-
-            return players.ToArray();
-        }
-
-        private string[] GetBlockedUsersList(ulong playerId)
-        {
-            return GetBlockedUsersList(playerId.ToString());
-        }
-
-        private string[] IsBlockedUsersOf(string playerId)
-        {
-            HashSet<string> blockedUsers;
-            return reverseData.TryGetValue(playerId, out blockedUsers) ? blockedUsers.ToArray() : new string[0];
-        }
-
-        private ulong[] IsBlockedUsersOf(ulong playerId)
-        {
-            return IsBlockedUsersOf(playerId.ToString()).Select(ulong.Parse).ToArray();
-        }
-
-        #endregion Blocked Users Lists
 
         #region Commands
 
@@ -728,87 +470,6 @@ namespace Oxide.Plugins
             }
         }
 
-        private void CommandBlock(IPlayer player, string command, string[] args)
-        {
-            if (player.IsServer)
-            {
-                Message(player, "PlayersOnly", command);
-                return;
-            }
-
-            if (config.UsePermissions && player.HasPermission(permUse))
-            {
-                Message(player, "NotAllowed", command);
-                return;
-            }
-
-            if (args.Length <= 0 || args.Length == 1 && !args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
-            {
-                Message(player, "UsageBlockedUsers", command);
-                return;
-            }
-
-            switch (args[0].ToLower())
-            {
-                case "list":
-                    string[] blockedList = GetBlockedUsersList(player.Id);
-                    if (friendList.Length > 0)
-                    {
-                        Message(player, "BlockedList", $"{blockedList.Length}/{config.MaxBlockedUsers}", string.Join(", ", friendList));
-                    }
-                    else
-                    {
-                        Message(player, "NoBlockedUsers");
-                    }
-
-                    return;
-
-                case "+":
-                case "add":
-                    IPlayer target = FindPlayer(args[1], player);
-                    if (target == null)
-                    {
-                        return;
-                    }
-
-                    if (player == target)
-                    {
-                        Message(player, "CannotBlockSelf");
-                        return;
-                    }
-
-                    PlayerData playerData = GetBlockedPlayerData(player.Id);
-                    if (playerData.Friends.Count >= config.MaxFriends)
-                    {
-                        Message(player, "BlockedListFull");
-                        return;
-                    }
-
-                    if (playerData.Friends.Contains(target.Id))
-                    {
-                        Message(player, "AlreadyOnBlockedList", target.Name);
-                        return;
-                    }
-
-                    AddFriend(player.Id, target.Id);
-                    Message(player, "BlockedUserAdded", target.Name);
-                    return;
-
-                case "-":
-                case "remove":
-                    string blockedUser = FindFriend(args[1]);
-                    if (string.IsNullOrEmpty(blockedUser))
-                    {
-                        Message(player, "NotOnBlockedList", args[1]);
-                        return;
-                    }
-
-                    bool removed = RemoveBlockedUser(player.Id, blockedUser.ToString());
-                    Message(player, removed ? "BlockedUserRemoved" : "NotOnBlockedList", args[1]);
-                    return;
-            }
-        }
-
         private void SendHelpText(object obj)
         {
             IPlayer player = players.FindPlayerByObj(obj);
@@ -838,23 +499,6 @@ namespace Oxide.Plugins
             return string.Empty;
         }
 
-        private string FindBlockedUser(string nameOrId)
-        {
-            if (!string.IsNullOrEmpty(nameOrId))
-            {
-                foreach (KeyValuePair<string, PlayerData> playerData in blockedData)
-                {
-                    if (playerData.Key.Equals(nameOrId) || playerData.Value.Name.IndexOf(nameOrId, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        return playerData.Key;
-                    }
-                }
-            }
-
-            return string.Empty;
-        }
-
-        // Verify with Mr. Fatt Y :) Maybe not
         private PlayerData GetPlayerData(string playerId)
         {
             PlayerData playerData;
@@ -867,23 +511,6 @@ namespace Oxide.Plugins
             if (player != null)
             {
                 playerData.Name = player.Name;
-            }
-
-            return playerData;
-        }
-
-        private PlayerData GetBlockedPlayerData(string playerId)
-        {
-            PlayerData playerData;
-            if (!blockedData.TryGetValue(playerId, out playerData))
-            {
-                blockedData[playerId] = playerData = new PlayerData();
-            }
-
-            IPlayer player = players.FindPlayerById(playerId);
-            if (player != null)
-            {
-                playerData.BlockedNames = player.BlockedNames;
             }
 
             return playerData;
