@@ -3,4 +3,4 @@ This is a Rust (video game) plugin that allows for the use of blocked people as 
 
 This plugin was made in a way that uploaded the ORIGINAL code first, and then edited it so you can compare and see any changes I had made. If you don't trust its the original code, do exactly the same thing, go get the orignal code from [MrBlue at uMod](https://umod.org/plugins/friends) and upload to a private GitHub repository, then edit the code you put in with my code, and you can see what has changed.
 
-This can be used in tandem with the [NTeleportaion modication](https://github.com/ViolationHandler-exe/NTeleportation-Blocking). This will allow you to block users and NOT allow them to teleport to you. 
+This can be used in tandem with the [NTeleportation modication](https://github.com/ViolationHandler-exe/NTeleportation-Blocking). This will allow you to block users and NOT allow them to teleport to you. 
